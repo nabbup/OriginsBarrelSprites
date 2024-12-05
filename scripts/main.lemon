@@ -1,0 +1,223 @@
+define CNZ_barrel_P1 = s8[0x8180f0]
+define CNZ_barrel_P1.backup = s8[0x8180f2]
+define P1_lookupdown_prog = u8[0x8180f4]
+
+define CNZ_barrel_P2 = s8[0x8180f6]
+define CNZ_barrel_P2.backup = s8[0x8180f8]
+define P2_lookupdown_prog = u8[0x8180fa]
+
+// end of DEZ1, into DEZ2 where the players are teleporting up
+//# address-hook(0x07eeee) end(0x07ef28)
+function void fn07eeee()
+{
+	base.fn07eeee()
+	CNZ_barrel_P1 = 1
+	CNZ_barrel_P2 = 1
+}
+
+// DEZ2 transporters
+//# address-hook(0x048d2c) end(0x048d60)
+function void fn048d2c()
+{
+	base.fn048d2c()
+	s8 val1 = global.inv_gravity ? 1 : -1
+	s8 val2 = global.inv_gravity ? -1 : 1
+	if (A1 == 0xffffb000)
+		CNZ_barrel_P1 = objA0.flags2a & 0x02 ? val1 : val2
+	else if (A1 == 0xffffb04a)
+		CNZ_barrel_P2 = objA0.flags2a & 0x02 ? val1 : val2
+}
+
+// CNZ barrel
+//# address-hook(0x032208) end(0x0322ee)
+function void fn032208()
+{
+	base.fn032208()
+	if !(objA0.render_flags & render_flag.VISIBLE)
+		return
+	bool lookingUp
+	bool lookingDown
+	if (objA0.flags2a & (object.flag.P1_ON_OBJECT))
+	{
+		CNZ_barrel_P1 = 0
+		lookingUp = control.player1.state & CONTROL_UP
+		lookingDown = control.player1.state & CONTROL_DOWN
+		
+		if (lookingUp && !lookingDown)
+			CNZ_barrel_P1 = 1
+		else if (lookingDown && !lookingUp)
+			CNZ_barrel_P1 = -1
+	}
+	if (objA0.flags2a & (object.flag.P2_ON_OBJECT))
+	{
+		CNZ_barrel_P2 = 0
+		lookingUp = control.tails.state & CONTROL_UP
+		lookingDown = control.tails.state & CONTROL_DOWN
+		
+		if (lookingUp && !lookingDown)
+			CNZ_barrel_P2 = 1
+		else if (lookingDown && !lookingUp)
+			CNZ_barrel_P2 = -1
+	}
+}
+
+// going up while in a teacup in LBZ
+//# address-hook(0x026b12) end(0x026b1a)
+function void fn026b12()
+{
+	base.fn026b12()
+	if !(objA0.render_flags & render_flag.VISIBLE)
+		return
+	if (objA0.flags2a & (object.flag.P1_ON_OBJECT))
+	{
+		CNZ_barrel_P1 = 0
+		if (u16[A0 + 0x36] == 0x02)
+			CNZ_barrel_P1 = 1
+		P1_lookupdown_prog = (u16[A0 + 0x36] == 0x02) ? 7 : 0
+	}
+	if (objA0.flags2a & (object.flag.P2_ON_OBJECT))
+	{
+		CNZ_barrel_P2 = 0
+		if (u16[A0 + 0x36] == 0x02)
+			CNZ_barrel_P2 = 1
+		P2_lookupdown_prog = (u16[A0 + 0x36] == 0x02) ? 7 : 0
+	}
+}
+
+function u16 Standalone.getModdedAnimationSpriteEx(u8 character, u8 animationSprite)
+{
+	string lookUp = stringformat("%s_3dlookup_0_0", getCharacterSpriteKey(character))
+	string lookDown = stringformat("%s_3dcrouch_0_0", getCharacterSpriteKey(character))
+	if (Renderer.hasCustomSprite(lookUp) && Renderer.hasCustomSprite(lookDown))
+		handle3DLookUpDownBackend(character)
+	return base.Standalone.getModdedAnimationSpriteEx(character, animationSprite)
+}
+
+function void handle3DLookUpDownBackend(u8 character)
+{
+	bool isP1 = (A0 == 0xffffb000)
+	bool isP2 = (A0 == 0xffffb04a) // not going to get much practical use aside from if a third player exists for SOME reason.
+	u8 prog = isP1 ? P1_lookupdown_prog : P2_lookupdown_prog
+	s8 state = isP1 ? CNZ_barrel_P1 : CNZ_barrel_P2
+	s8 state_backup = isP1 ? CNZ_barrel_P1.backup : CNZ_barrel_P2.backup
+	
+	if (A0 == 0xffffb000)
+	{
+		prog = P1_lookupdown_prog
+		state = CNZ_barrel_P1
+		state_backup = CNZ_barrel_P1.backup
+	}
+	else // must be secondary character
+	{
+		prog = P2_lookupdown_prog
+		state = CNZ_barrel_P2
+		state_backup = CNZ_barrel_P2.backup
+	}
+	
+	u8 pressed = isP1 ? control.pad1.pressed : isP2 ? control.pad2.pressed : 0
+	if ((pressed == 1 || pressed == 2) && prog == 7)
+	{
+		prog = 0
+	}
+	
+	if (state != 0)
+	{
+		prog = min(prog + 1, 7)
+		state_backup = state
+	}
+	else
+	{
+		prog = max(s8(prog - 1), 0)
+		if (prog == 0)
+			state_backup = 0
+	}
+	
+	bool inRotationSprites = char.animation.sprite <= 0x5b && char.animation.sprite >= 0x55
+	string mid = stringformat("%s_3dstand_0", getCharacterSpriteKey(character))
+	if (state_backup != 0 || (state_backup == 0 && Renderer.hasCustomSprite(mid) && inRotationSprites))
+	{
+		if (char.render_flags & render_flag.FLIP_X)
+		{
+			char.render_flags &= ~render_flag.FLIP_X
+			char.animation.frame = 2
+		}
+		else
+			char.animation.frame = 1
+	}
+	
+	if (A0 == 0xffffb000)
+	{
+		P1_lookupdown_prog = prog
+		CNZ_barrel_P1 = state
+		CNZ_barrel_P1.backup = state_backup
+	}
+	else // must be secondary character
+	{
+		P2_lookupdown_prog = prog
+		CNZ_barrel_P2 = state
+		CNZ_barrel_P2.backup = state_backup
+	}
+}
+
+function string handle3DLookUpDownGraphics(u8 character)
+{
+	bool isP1 = (A0 == 0xffffb000)
+	bool isP2 = (A0 == 0xffffb04a) // not going to get much practical use aside from if a third player exists for SOME reason.
+	u8 prog = isP1 ? P1_lookupdown_prog : P2_lookupdown_prog
+	s8 state = isP1 ? CNZ_barrel_P1 : CNZ_barrel_P2
+	s8 state_backup = isP1 ? CNZ_barrel_P1.backup : CNZ_barrel_P2.backup
+	
+	bool inRotationSprites = char.animation.sprite <= 0x5b && char.animation.sprite >= 0x55
+	
+	u8 sprite = min(char.animation.sprite - 0x55, 6)
+	if (char.animation.frame == 2)
+	{
+		sprite += 7
+	}
+	
+	if (inRotationSprites && state_backup == 0 && prog == 0)
+	{
+		string key = stringformat("%s_3dstand_%d", getCharacterSpriteKey(character), sprite)
+		if (Renderer.hasCustomSprite(key))
+			return key
+	}
+	
+	if (inRotationSprites && state_backup != 0 && prog != 0 && (isP1 || isP2))
+	{	
+		u8 full_lookupdown = (P1_lookupdown_prog == 7)
+		
+		string up = stringformat("%s_3dlookup_%d_%d", getCharacterSpriteKey(character), full_lookupdown, sprite)
+		string down = stringformat("%s_3dcrouch_%d_%d", getCharacterSpriteKey(character), full_lookupdown, sprite)
+		
+		string key = state_backup > 0 ? up : down
+		
+		if (Renderer.hasCustomSprite(key))
+			return key
+		else
+			return false
+	}
+	else
+	{
+		if (isP1)
+		{
+			P1_lookupdown_prog = 0
+			CNZ_barrel_P1 = 0
+			CNZ_barrel_P1.backup = 0
+		}
+		else if (isP2)
+		{
+			P2_lookupdown_prog = 0
+			CNZ_barrel_P2 = 0
+			CNZ_barrel_P2.backup = 0
+		}
+		return false
+	}
+}
+
+function u64 Standalone.getModdedAnimationSpriteKey(u8 character, u16 animationSpriteEx)
+{
+	string barrelLooking = handle3DLookUpDownGraphics(character)
+	if (barrelLooking && char.jumping == 0)
+		return barrelLooking
+	return base.Standalone.getModdedAnimationSpriteKey(character, animationSpriteEx)
+}
