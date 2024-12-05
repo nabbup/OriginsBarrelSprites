@@ -4,7 +4,7 @@
 		"Name": "Origins Barrel Sprites",
 		"UniqueID": "nabbup-origins-barrel-sprites",
 		"Author": "Raine (nabbup)",
-		"Description": "Modifies scripts to enable some usage of Sonic Origins' new sprites for the characters.\nIt's kinda jank, and it was based off of code I made for Amy Galore.",
+		"Description": "Modifies scripts to enable some usage of Sonic Origins' new sprites for the characters.\nIt's kinda jank, and it was based off of code I made for Amy Galore.\nUses same sprites as Vinny's Origins Additional Animations for compatibility.",
 		"GameVersion": "24.02.02.0"
-	},
+	}
 }
